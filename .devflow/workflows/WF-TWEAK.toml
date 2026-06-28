@@ -1,0 +1,56 @@
+# WF-TWEAK: Strict methodology with micro-change strategy
+# 详细协议见 AGENTS.md「跳过协议」（跳过路径）
+
+[workflow]
+id = "WF-TWEAK"
+name = "WF Tweak"
+description = "Strict methodology for copy, style, and small interaction tweaks"
+version = "2.2"
+
+[[steps]]
+id = "set-change"
+name = "Set Change Name"
+prompt = """## Set Change Name — `devflow set change <name>`"""
+gates = ["state_set:change"]
+next = "init"
+
+[[steps]]
+id = "init"
+name = "Init (Tweak)"
+prompt = """## Init (Tweak) — Gate 状态由 devflow:start 自动初始化（task-type: auto-skip）"""
+gates = []
+next = "skip"
+
+[[steps]]
+id = "skip"
+name = "Record Auto Skip"
+prompt = """
+## Skip (Auto) — 记录跳过，进入最小必要步骤
+
+Gate
+```bash
+pnpm -s run harness:skip -- --id {change} --marker AUTO-SKIP --reason tweak:auto
+```
+"""
+gates = [
+  "command_success:pnpm -s run harness:skip -- --id {change} --marker AUTO-SKIP --reason tweak:auto",
+  "file_exists:.devflow/evidence/{change}/SKIP.md",
+]
+next = "tweak"
+
+[[steps]]
+id = "tweak"
+name = "Tweak: Implement And Verify"
+prompt = """
+## Tweak — 改代码 + check:type
+
+Gate
+```bash
+pnpm -s run harness:tweak -- --id {change}
+```
+"""
+gates = [
+  "command_success:pnpm -s run harness:tweak -- --id {change}",
+  "file_exists:.devflow/evidence/{change}/TWEAK.md",
+]
+next = ""
