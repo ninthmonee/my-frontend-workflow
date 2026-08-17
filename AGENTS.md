@@ -1,7 +1,7 @@
 # AGENTS.md — Agent 行为契约
 
-> DevFlow 为唯一流程真相。本文件定义 Agent 的行为规则：什么必须做、什么禁止做、各 Phase 怎么执行。
-> 项目事实见 [REASONIX.md](./REASONIX.md)。团队讲解见 [DEVFLOW_WORKFLOW_SHARE.md](./DEVFLOW_WORKFLOW_SHARE.md)。
+> 工作流为唯一流程真相。本文件定义 Agent 的行为规则：什么必须做、什么禁止做、各 Phase 怎么执行。
+> 项目事实见 [REASONIX.md](./REASONIX.md)。思考流与回复使用中文，仅专业术语保留英文。
 
 ---
 
@@ -11,12 +11,15 @@
 
 **不触发（直接回答）：** 纯问答、读代码、分析架构。
 
-**触发（代码变更请求）：** 执行入口判断。判断前先扫描紧急关键词，命中则问"是否走 hotfix？"：
+**不触发（工作流基础设施）：** 修改以下工作流自身文件，不触发工作流——改工作流的代码不需要走工作流：
+`AGENTS.md` `REASONIX.md` `workflow.md` `workflow/` `.reasonix/skills/` `scripts/harness.mjs`
+
+**触发（代码变更请求）：** 除上述两类外的业务代码修改请求（`.ts` `.vue` `.css` 等），执行入口判断。判断前先扫描紧急关键词，命中则问"是否走 hotfix？"：
 `紧急` `赶紧` `线上` `马上` `修 bug` `hotfix` `崩溃` `报错` `挂了` `不行了` `回滚` `立刻`
 
 **入口判断（先质后量）：** 按分级标准判定 🟢🟡🔴 → **输出标记**（`⚠️ [AUTO-SKIP]` / `⚠️ [MANDATORY]`）→ 走对应路径。🟡 默认走 TWEAK，用户说"走流程"则转 FULL。禁止未输出标记直接写代码。
 
-> ⚠️ SessionStart 后 MUST 先读取 `.devflow/harness/state.json` 检查是否有活跃流程。若 `taskType` 为 full/mandatory/hotfix 且 `gates.DONE` 未 passed → **继续当前流程**，不需要重复入口判断。若 `gates.DONE` 已 passed → 新变更请求需重新 `/devflow start`。
+> ⚠️ SessionStart 后 MUST 先读取 `workflow/harness/state.json` 检查是否有活跃流程。若 `taskType` 为 full/mandatory/hotfix 且 `gates.DONE` 未 passed → **继续当前流程**，不需要重复入口判断。若 `gates.DONE` 已 passed → 新变更请求需重新 `pnpm -s run harness:start`。
 
 ---
 
@@ -27,7 +30,6 @@
 | Phase 内执行（检索/实现/验证/自检/沉淀） | 代替用户做 P0/P1/P3 确认 |
 | 输出可核验证据（命令输出、diff、文件列表） | 未获确认时写入 `gateReady` / `userConfirmed` |
 | 最小改动、不猜 API、不顺手优化 | 跳过入口判断直接写代码 |
-| 思考流与回复用户使用中文，仅专业术语保留英文 | 对用户输出全英文或中英混杂 |
 
 ---
 
@@ -50,41 +52,50 @@
 用户要求跳过时，Agent 输出：
 
 ```
-DevFlow 强制规则要求即使是小改动也需要走完流程以保障质量。
+工作流强制规则要求即使是小改动也需要走完流程以保障质量。
 我会以最快速度执行：改前检索 → 最小改动 → check:type → 问你是否沉淀。
 如仍要完全跳过，请回复「确认跳过」。
 ```
 
 | 标记 | 触发 | Agent 最小步骤 |
 |---|---|---|
-| `⚠️ [AUTO-SKIP]` | 🟢 自动判定 或 🟡 默认路径 | 入口判断 → compound-engineering 轻量检索 → 改代码 → `harness:tweak` → 输出 `[TWEAK:DONE]` |
+| `⚠️ [AUTO-SKIP]` | 🟢 自动判定 或 🟡 默认路径 | 入口判断 → `harness:start --mode tweak` 初始化 → compound-engineering 轻量检索 → 改代码 → `harness:tweak` → 询问是否沉淀 → 输出 `[TWEAK:DONE]` |
 | `⚠️ [SKIPPED]` | 用户确认跳过 | 同上 |
 | `⚠️ [SKIPPED-UNCONFIRMED]` | 用户坚持但未确认 | 同上 + 记录上下文 |
 
-**TWEAK 路径与 FULL 路径的差异：** TWEAK 不加载 `project-constraints`、不加载领域 skill、不做任务拆解、不填 P0 槽位。仅做 compound-engineering 轻量检索（有结果则用，无结果跳过）。
+**TWEAK 路径与 FULL 路径的差异：** TWEAK 不加载 `project-constraints`、不加载领域 skill、不做任务拆解、不填 P0 槽位。仅做 compound-engineering 轻量检索（有结果则用，无结果跳过）。check:type 通过后必须询问是否沉淀经验（全部工作流统一强制询问 + 给出推荐理由 + 等待用户确认）。
 
 ---
 
 ## Phase 执行协议
 
-Gate 命令由 WF-*.toml 自动执行，Agent 不手动推进 Gate。Agent 负责 Phase 内工作。
+Gate 状态由 `harness:gate` 写入 `workflow/harness/state.json`，Agent 按 Phase 协议逐阶段推进。
 
 **每个 Phase 进入时 MUST 输出进度摘要 + 证据文件索引：**
 
 ```
 📊 进度: ✅ Phase 0 → ✅ Phase 1 → 🔵 Phase 2 → ⏳ Phase 3 → ⏳ Phase 4
-📁 证据: P0=evidence/<change>/P0.md  P1=evidence/<change>/P1.md  TASKS=evidence/<change>/TASKS.md
+📁 证据: P0=workflow/evidence/<change>/P0.md  P1=workflow/evidence/<change>/P1.md  TASKS=workflow/evidence/<change>/TASKS.md
 📋 任务: 2/4 done（读取 TASKS.md 获取最新状态）
 ```
+
+### 同一 Session 内多次启动工作流（重要）
+
+`harness:start` 会调用 `gate-reset` 清空 `workflow/harness/state.json`，但 Agent 的会话上下文不会自动清空。同 session 内第二次及后续启动工作流时，Agent MUST 遵守：
+
+- 将每次 `harness:start` 视为全新工作流的起点，按 Phase 执行协议从头推进，**不可因"刚走过一轮"而跳过步骤**
+- Phase 0 所有步骤不可跳过（步骤 1 在确认 project-constraints 仍在上下文时可跳过加载，否则必须重载）
+- **严禁**用上一轮工作流的 Phase 3「已解决」结论来跳过新一轮的任何 Gate 或确认步骤
+- 每次 `harness:start` 使用独立的 `--change` 名称，证据目录 `workflow/evidence/<change>/` 互不干扰
 
 ### Phase 0 — 改前准备
 
 **进入时输出标记：** `[PHASE:0] 开始改前准备`
 
-1. 加载 `project-constraints`（同 session 已加载则跳过）
+1. 加载 `project-constraints`。同 session 首次加载后可跳过；若为同 session 内非首次启动工作流（即本次 session 已通过 `harness:start` 执行过至少一次），Agent MUST 先自检 project-constraints 的核心约束是否仍在上下文中。若不确定 → 必须重新加载，不得跳过。
 2. `compound-engineering` **必须执行改前检索**（每次需求不同，不可跳过）
 3. 根据需求涉及的领域按需加载对应 skill（见路由表）。**仅加载需求中用到的**——例如用户没提到 Table/Modal 则不加载 antdv-next
-4. **任务拆解**：将需求拆为可落地的具体任务，写入 `.devflow/evidence/<change>/TASKS.md`。
+4. **任务拆解**：将需求拆为可落地的具体任务，写入 `workflow/evidence/<change>/TASKS.md`。
    - 使用 `- [ ] N.M` checkbox 格式，按依赖顺序排列
    - 用 `## N.` 二级标题分组（如 Setup / Core / Integration）
    - 每项必须包含：`files`（涉及文件）、`verify`（可验证的完成标准）、`mapsTo`（追溯到 P0 Scope/Risks 条目）
@@ -93,68 +104,76 @@ Gate 命令由 WF-*.toml 自动执行，Agent 不手动推进 Gate。Agent 负�
    - **Scope**：涉及文件/目录 + 非目标（明确不做的事）
    - **Risks**：至少 1 条具体风险
    - **hotfix 额外**：Blast radius + Rollback note
-   - **Tasks**（可选）：步骤 4 拆解的任务清单
 6. **任一 Scope/Risks 槽位无法确定 → MUST ask 用户补齐**，不得留空或写"待定"
 7. 展示证据给用户审阅，用户确认后继续
 8. **Gate 通过时输出标记：** `[GATE:P0] ✅`
+
+**Gate：** Scope 和 Risks 不能有占位符或空值，至少一条具体风险。
 
 ### Phase 1 — 开发
 
 **进入时输出标记：** `[PHASE:1] 开始开发`
 
-1. **读取 `.devflow/evidence/<change>/TASKS.md` 并逐项执行**：每完成一项将 `- [ ]` 改为 `- [x]`，进行中的加注释 `<!-- in_progress -->`。每完成一项输出 `📋 TASKS: 2/4 done`
-2. 判断复杂度：≤3 文件直接开发，否则委派 `devflow-worker`
-3. 最小改动、不猜 API、确认无同类封装
-4. 生成 P1 证据，两个必填槽位：
-   - **Changed files**：实际改动文件列表（按目录归类）。使用 `git diff --name-only` 获取准确文件列表，避免遗漏。
-   - **Non-goals respected**：确认未做非目标范围内的事
+1. **读取 `workflow/evidence/<change>/TASKS.md` 并逐项执行**：每完成一项将 `- [ ]` 改为 `- [x]`，进行中的加注释 `<!-- in_progress -->`。每完成一项输出 `📋 TASKS: 2/4 done`
+2. **决策阶梯（Ponytail）**：每项任务动手前，从第一级开始自问，命中最简方案即停：
+   ① **这真的需要吗？** → 不必要则跳过（YAGNI），在 TASKS.md 标注 `[-] 已跳过（YAGNI）`
+   ② **标准库有吗？** → `Date`、`URL`、`Array.from`、`Intl` 等，优先用 stdlib
+   ③ **浏览器原生有吗？** → `<input type="date">`、`<dialog>`、`URLSearchParams`、`localStorage` 等
+   ④ **已安装依赖有吗？** → `lodash`、`dayjs`、`echarts` 等，确认已安装就用
+   ⑤ **项目内已有封装？** → `@decision-core/*`、`use-*` hooks、既有组件
+   ⑥ **能一行搞定？** → 直接写，不做 wrapper、不做 class
+   ⑦ **以上都不行** → 写最小可行实现，禁止预先抽象
+3. 判断复杂度：≤3 文件直接开发，否则委派 `task-worker`
+4. 最小改动、不猜 API、确认无同类封装
+5. 生成 P1 证据（`harness:p1` 自动填充 Changed Files；Agent 确认 Non-goals 未触及）。
    - **hotfix 额外**：Risk mitigation + Rollback: ready/NA
-5. 展示证据给用户审阅，用户确认后继续
-6. **Gate 通过时输出标记：** `[GATE:P1] ✅`
+6. 展示证据给用户审阅，用户确认后继续
+7. **Gate 通过时输出标记：** `[GATE:P1] ✅`
+
+**Gate：** 所有任务必须标记为 `[x]`（已完成）或 `[-]`（YAGNI 跳过），禁止残留 `[ ]`（未完成）的任务。
 
 ### Phase 2 — 验证 + 收敛 Loop
 
-**进入时输出标记：** `[PHASE:2] 开始验证 (build → lint → typecheck)`
+**进入时输出标记：** `[PHASE:2] 开始验证 (build → format → lint → typecheck)`
 
-1. `harness:p2` 分层执行：build → lint → typecheck，首失败即停
+1. `harness:p2` 分层执行：build → format → lint → typecheck，首失败即停
 2. 通过 → 收敛，**输出标记：** `[GATE:P2] ✅`
-3. 失败 → 读 **`P2-errors.txt`**（位于 `evidence/{change}/` 下，非完整日志）→ 修正代码 → `harness:p2 --quick` 重试
-4. 最多 3 轮。每轮输出：`[LOOP:2/N] 修正第 N 轮 (errors: X → Y)`
-5. 错误暴增（>1.5x）→ `[REGRESSION]` → 按文件回退：`git checkout -- <file>` 仅回退出问题的文件，不动其他文件
-6. 3 轮不通 → `[STUCK]` → `git checkout -- .` 丢弃 working tree 修改，通知用户
-7. 自动修正成功 → **输出标记：** `[GATE:P2] ✅ ⚡auto-fixed (N rounds)`
+3. 失败 → 委派 **`p2-verifier`** 子 Agent（只读），传入 `P2-errors.txt` 路径，由 verifier 独立分析错误并输出修正方案
+4. 主 Agent 读 verifier 方案：可修项 → 逐一执行修改；需人工项 → 停止，通知用户
+5. 修改完成后 `harness:p2 --quick` 重试
+6. 最多 3 轮。每轮输出：`[LOOP:2/N] 修正第 N 轮 (errors: X → Y)`
+7. 错误暴增（>1.5x）→ `[REGRESSION]` → 按文件回退：`git checkout -- <file>` 仅回退出问题的文件，不动其他文件
+8. 3 轮不通 → `[STUCK]` → `git checkout -- .` 丢弃 working tree 修改，通知用户
+9. 自动修正成功 → **输出标记：** `[GATE:P2] ✅ ⚡auto-fixed (N rounds)`
 
-**可修（示例）：**
-- 缺失 import 语句
-- TypeScript 类型标注不匹配（`string` → `number`）
-- 空值访问（`x.y` 中 x 可能为 null/undefined，补 `?.` 或判空守卫）
-- 未使用变量/导入
-
-**禁止：** 修改业务逻辑分支条件、替换组件/API/库、重构函数/文件结构、删除功能代码。
-
-**不确定的判断标准：** 以下情况直接停下，不要尝试修正——
-- 错误信息看不懂
-- 需要修改 ≥2 个函数的签名才能修
-- 改动会影响其他模块的调用方
-- 错误涉及运行时行为而非编译时类型
+**Gate：** build + format + lint + typecheck 全部 exit=0。首失败即停，最多 3 轮修正。可修/不可修判断由 `p2-verifier` 子 Agent 执行，详见其 skill 定义。
 
 ### Phase 3 — 收尾自检
 
 **进入时输出标记：** `[PHASE:3] 开始收尾自检`
 
-1. `pipeline-guard` 自检（检查 Phase 0-2 证据完整性，skill 路径: `.agents/skills/pipeline-guard/`）
+1. `pipeline-guard` 自检（检查 Phase 0-2 证据完整性）
 2. `harness:gate-verify` 校验 P0/P1/P2 完整性
-3. **用户必须确认**（已解决/未解决）。
-4. **Gate 通过时输出标记：** `[GATE:P3] ✅`
+3. **用户确认问题解决**：Agent MUST 使用 `ask` 工具发起交互式确认（不中断工作流），确认以下三点：
+   - ✅ 改动是否正确？
+   - ✅ 问题是否已解决？
+   - ✅ 需求功能是否已实现 / 是否已满足需求？
+4. **分支处理**：
+   - 用户确认「已解决」→ 继续步骤 5
+   - 用户确认「未解决」→ 记录具体问题，🔁 回退 Phase 1 修复，修复完成后重新走 Phase 2 → Phase 3
+5. **Gate 通过时输出标记：** `[GATE:P3] ✅`
+
+**Gate：** pipeline-guard 自检通过 + gate-verify（P0/P1/P2 全部完成）+ 用户确认「已解决」。
 
 ### Phase 4 — 知识沉淀
 
 **进入时输出标记：** `[PHASE:4] 开始知识沉淀`
 
-1. 确认已解决后（P3 已确认 → 跳过二次提问）
-2. 去重检查：与已有经验对比（维度：现象描述 / 技术栈 / 领域 / 根因分类 / 解法模式）。5 维中 4-5 维匹配 → 更新旧条目；2-3 维匹配 → 旧条目下补充小节；0-1 维匹配 → 新增条目
-3. 同步更新 INDEX.md。**hotfix 优先沉淀 fix type，severity=high**
-4. **Gate 通过时输出标记：** `[GATE:DONE] ✅`
+**前提：** Phase 3 用户已确认「问题已解决」。若 Phase 3 用户确认「未解决」→ 不应进入 Phase 4，回退 Phase 1 修复。
+
+所有工作流（HOTFIX/TWEAK/FULL）统一强制询问：Agent MUST 总结值得沉淀的点并给出推荐理由，使用 `ask` 工具发起交互式询问（不中断工作流），等待用户明确确认。用户说"是" → 按 `compound-engineering` skill 的去重规则执行去重 + 写入 + 更新 INDEX.md；用户说"不" → `status: skipped`。**禁止** Agent 未经确认自行跳过。
+
+**Gate：** 用户确认是否沉淀 + 证据完整。`[GATE:DONE] ✅`
 
 ---
 
@@ -178,9 +197,7 @@ Gate 命令由 WF-*.toml 自动执行，Agent 不手动推进 Gate。Agent 负�
 
 ## 硬约束
 
-- **最小改动**：只做任务要求的改动，禁止顺手优化、顺手重构
-- **不猜 API**：不确定的用法先查 skill 文档
-- **不复刻轮子**：先搜项目内已有封装
+- **Ponytail 决策阶梯**：Phase 1 步骤 2 已详述，每条改动前必须走完 7 级自检
 - **证据优先**：聊天输出 ≤6 行摘要，长日志/长 diff 写本地证据文件
 - **退出机制**：API 不确定、连续 3 次编辑失败 → 停止，问用户
 
@@ -193,14 +210,3 @@ Gate 命令由 WF-*.toml 自动执行，Agent 不手动推进 Gate。Agent 负�
 | 跳过路径未跑 check:type | ⛔ 跳过也必须跑 |
 | 状态文件脏了 | `pnpm -s run harness:gate-reset -- --type full` |
 | 改坏了想回退 | `git checkout -- <file>` 按文件回退；`git checkout -- .` 全量丢弃 |
-
-## 跨会话恢复
-
-SessionStart 时 MUST 自主读取 `.devflow/harness/state.json` 检查是否有活跃流程。
-
-若 `state.json` 存在活跃流程（`taskType` 为 full/mandatory/hotfix 且 `gates.DONE` 未 passed）：
-1. 输出恢复提示："📊 检测到未完成的 DevFlow 流程 [{change}]，当前 Phase {N}。是否继续？"
-2. 用户确认后直接恢复到对应 Phase，**不需要重新 `/devflow start`**
-3. 若用户选择放弃当前流程，执行 `harness:gate-reset` 清理状态
-
-若 `state.json` 不存在或无活跃流程：正常响应，收到代码变更请求时执行入口判断。

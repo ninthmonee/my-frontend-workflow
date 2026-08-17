@@ -1,0 +1,18 @@
+# P2 Errors: pnpm -s run check:type
+
+@decision/main-app:typecheck: src/views/master-data/supply-network/components/add-path-modal/index.vue(163,8): error TS2322: Type '{ saleZone: { required: boolean; type: "string"; message: string; trigger: string; }[]; customerLevel: { required: boolean; type: "string"; message: string; trigger: string; }[]; factoryZone: { required: boolean; type: "string"; message: string; trigger: string; }[]; ... 4 more ...; unitCost: { ...; }[]; }' is not assignable to type 'Record<string, Rule[]>'.
+@decision/main-app:typecheck:     Type '{ required: boolean; type: "string"; message: string; trigger: string; }[]' is not assignable to type 'Rule[]'.
+@decision/main-app:typecheck:       Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'Rule'.
+@decision/main-app:typecheck:         Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'AggregationRule | RuleRender'.
+@decision/main-app:typecheck:           Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'AggregationRule'.
+@decision/main-app:typecheck:             Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'BaseRule'.
+@decision/main-app:typecheck:                 Type 'string' is not assignable to type 'TriggerType | TriggerType[] | undefined'.
+@decision/main-app:typecheck: src/views/master-data/supply-network/components/create-version-modal/index.vue(91,8): error TS2322: Type '{ fromVersionId: { required: boolean; type: "string"; message: string; trigger: string; }[]; version: ({ required: boolean; type: "string"; message: string; trigger: string; max?: undefined; } | { max: number; message: string; trigger: string; required?: undefined; type?: undefined; })[]; }' is not assignable to type 'Record<string, Rule[]>'.
+@decision/main-app:typecheck:     Type '{ required: boolean; type: "string"; message: string; trigger: string; }[]' is not assignable to type 'Rule[]'.
+@decision/main-app:typecheck:       Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'Rule'.
+@decision/main-app:typecheck:         Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'AggregationRule | RuleRender'.
+@decision/main-app:typecheck:           Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'AggregationRule'.
+@decision/main-app:typecheck:             Type '{ required: boolean; type: "string"; message: string; trigger: string; }' is not assignable to type 'BaseRule'.
+@decision/main-app:typecheck:                 Type 'string' is not assignable to type 'TriggerType | TriggerType[] | undefined'.
+@decision/main-app:typecheck: ERROR: command finished with error: command (/Users/admin/Desktop/projects/optimos-intco-frontend/apps/main-app) /Users/admin/Desktop/projects/optimos-intco-frontend/.pnpm-store/v11/links/@/pnpm/10.12.4/23601b37897356e58307ce4cd4db13482c7a4bb9831dbfcc8ef79a445e7b2431/bin/pnpm run typecheck exited (2)
+ ERROR  run failed: command  exited (2)

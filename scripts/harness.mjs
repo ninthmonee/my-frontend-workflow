@@ -1,12 +1,13 @@
+/* eslint-disable no-useless-escape */
 /* eslint-disable regexp/no-unused-capturing-group */
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
-const DEVFLOW_DIR = join(ROOT, '.devflow');
-const HARNESS_DIR = join(DEVFLOW_DIR, 'harness');
-const EVIDENCE_DIR = join(DEVFLOW_DIR, 'evidence');
+const WORKFLOW_DIR = join(ROOT, 'workflow');
+const HARNESS_DIR = join(WORKFLOW_DIR, 'harness');
+const EVIDENCE_DIR = join(WORKFLOW_DIR, 'evidence');
 const STATE_PATH = join(HARNESS_DIR, 'state.json');
 
 function nowId() {
@@ -48,11 +49,13 @@ async function readState() {
   try {
     const raw = await fs.readFile(STATE_PATH, 'utf8');
     return JSON.parse(raw);
-  } catch (e) {
+  } catch (error) {
     // ENOENT: 无状态文件（正常）
-    if (e.code === 'ENOENT') return {};
+    if (error.code === 'ENOENT') return {};
     // JSON 解析失败: 损坏
-    process.stderr.write(`⚠️  state.json 已损坏，请运行 harness:gate-reset 重置\n`);
+    process.stderr.write(
+      `⚠️  state.json 已损坏，请运行 harness:gate-reset 重置\n`,
+    );
     return {};
   }
 }
@@ -72,6 +75,10 @@ async function getRunId(flags) {
   const state = await readState();
   if (typeof state.lastRunId === 'string' && state.lastRunId.trim()) {
     return state.lastRunId;
+  }
+  // fallback: gateReset 写入的 change 名称（避免因遗漏 --id 而导致证据目录分裂）
+  if (typeof state.change === 'string' && state.change.trim()) {
+    return state.change;
   }
   const id = nowId();
   await writeState({ ...state, lastRunId: id });
@@ -113,59 +120,6 @@ function readScalar(content, key) {
   return m?.[1]?.trim() ?? '';
 }
 
-function replaceScalarLine(content, key, value) {
-  const re = new RegExp(`^(\\s*-\\s*${key}:\\s*).*$`, 'im');
-  if (!re.test(content)) {
-    throw new Error(`Evidence 格式不符合预期：缺少 "${key}" 行`);
-  }
-  return content.replace(re, `$1${value}`);
-}
-
-async function approveGate(flags) {
-  const phase = (flags.get('phase') ?? '').toLowerCase();
-  const runId = await getRunId(flags);
-
-  const normalized =
-    phase === '0' || phase === 'p0'
-      ? 'P0'
-      : phase === '1' || phase === 'p1'
-        ? 'P1'
-        : phase === '3' || phase === 'p3'
-          ? 'P3'
-          : phase === '4' || phase === 'p4'
-            ? 'P4'
-            : '';
-
-  if (!normalized) {
-    throw new Error(
-      `缺少或非法参数：--phase <p0|p1|p3|p4>\n示例：pnpm -s run harness:approve -- --phase p0 --id ${runId}`,
-    );
-  }
-
-  const { evidencePath, content } = await readEvidence(normalized, runId);
-  let next = content;
-
-  if (normalized === 'P0' || normalized === 'P1') {
-    next = replaceScalarLine(next, 'gateReady', 'YES');
-  }
-
-  if (normalized === 'P3') {
-    next = replaceScalarLine(next, 'verifyPassed', 'YES');
-    next = replaceScalarLine(next, 'userConfirmed', 'YES');
-  }
-
-  if (normalized === 'P4') {
-    next = replaceScalarLine(next, 'knowledgeDone', 'YES');
-    const status = flags.get('status');
-    const path = flags.get('path');
-    if (status) next = replaceScalarLine(next, 'status', status);
-    if (path) next = replaceScalarLine(next, 'compoundEngineeringPath', path);
-  }
-
-  await fs.writeFile(evidencePath, next, 'utf8');
-  process.stdout.write(`Evidence updated: ${evidencePath}\n`);
-}
-
 async function validateP0(runId) {
   const { evidencePath, content } = await readEvidence('P0', runId);
   if (!expectLineYes(content, 'gateReady')) {
@@ -201,9 +155,17 @@ async function validateTasks(runId) {
   }
 
   // check at least one task checkbox exists (not just template)
-  if (!/\n- \[[ x]\] /.test(content)) {
+  if (!/\n- \[[ x\-]\] /.test(content)) {
     throw new Error(
-      `Tasks 未满足门禁：${tasksPath} 中没有任务 checkbox，MUST 至少有一条 - [ ] 或 - [x]`,
+      `Tasks 未满足门禁：${tasksPath} 中没有任务 checkbox，MUST 至少有一条 - [ ] 或 - [x] 或 - [-]`,
+    );
+  }
+
+  // check no incomplete (non-skipped) tasks remain — all must be [x] or [-]
+  const incomplete = content.match(/^- \[ \] /gm);
+  if (incomplete && incomplete.length > 0) {
+    throw new Error(
+      `Tasks 未满足门禁：${tasksPath} 中有 ${incomplete.length} 条未完成的任务。所有任务必须标记为 [x]（已完成）或 [-]（跳过 YAGNI），禁止残留 [ ]。`,
     );
   }
 
@@ -443,6 +405,55 @@ async function writeP4(flags) {
   );
 }
 
+/**
+ * approve <phase> — 将证据文件中的 TODO 字段翻转为 YES
+ * 支持 P0/P1/P3/P4，可选 --status written|skipped（仅 P4）
+ */
+async function approveGate(flags) {
+  const phase = (flags.get('phase') ?? '').toUpperCase();
+  const VALID_PHASES = ['P0', 'P1', 'P3', 'P4'];
+  if (!VALID_PHASES.includes(phase)) {
+    throw new Error(
+      `非法 phase: ${phase}，可选: ${VALID_PHASES.join(', ')}`,
+    );
+  }
+  const runId = await getRunId(flags);
+  const { evidencePath, content } = await readEvidence(phase, runId);
+
+  const replacements = {
+    P0: [{ from: 'gateReady: TODO', to: 'gateReady: YES' }],
+    P1: [{ from: 'gateReady: TODO', to: 'gateReady: YES' }],
+    P3: [
+      { from: 'verifyPassed: TODO', to: 'verifyPassed: YES' },
+      { from: 'userConfirmed: TODO', to: 'userConfirmed: YES' },
+    ],
+    P4: [{ from: 'knowledgeDone: TODO', to: 'knowledgeDone: YES' }],
+  };
+
+  let result = content;
+  for (const { from, to } of replacements[phase]) {
+    if (result.includes(from)) {
+      result = result.replace(from, to);
+    }
+  }
+
+  // P4 可选 --status 设置 knowledge status 字段
+  if (phase === 'P4') {
+    const status = flags.get('status');
+    if (status && ['written', 'skipped'].includes(status)) {
+      result = result.replace(
+        /- status: TODO[^\n]*/,
+        `- status: ${status}`,
+      );
+    }
+  }
+
+  await fs.writeFile(evidencePath, result, 'utf8');
+  process.stdout.write(
+    `[APPROVE:${phase}] ✅ ${evidencePath}\n`,
+  );
+}
+
 function runCommand(command, args, cwd) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -515,7 +526,7 @@ async function verifyP2(flags) {
 
   const startedAt = new Date().toISOString();
 
-  // ── layered execution: build → lint → typecheck ──
+  // ── layered execution: build → format → lint → typecheck ──
   const checkOrder = [
     {
       name: `pnpm -s run ${buildScript}`,
@@ -525,6 +536,12 @@ async function verifyP2(flags) {
     },
     ...(lintEnabled
       ? [
+          {
+            name: 'pnpm -s run format',
+            cmd: 'pnpm',
+            args: ['-s', 'run', 'format'],
+            key: 'format',
+          },
           {
             name: 'pnpm -s run lint',
             cmd: 'pnpm',
@@ -573,6 +590,15 @@ async function verifyP2(flags) {
   // save failed keys + convergence round for quick mode and session recovery
   const state = await readState();
   const newRound = allPassed ? 0 : (state.p2ConvergenceRound || 0) + 1;
+
+  // hard limit: 3 rounds max
+  if (newRound > 3) {
+    process.stderr.write(
+      `❌ P2 收敛已达最大轮次 (3)，无法继续自动修正。\n请手动修复问题后重新运行 harness:p2。\n`,
+    );
+    process.exit(1);
+  }
+
   await writeState({
     ...state,
     p2FailedKeys: allPassed ? null : failedKeysList,
@@ -599,7 +625,6 @@ async function verifyP2(flags) {
   ];
 
   if (allPassed) {
-    // full output for passing runs
     md.push(
       `## Commands`,
       ...results.flatMap((r) => [
@@ -615,7 +640,6 @@ async function verifyP2(flags) {
       ]),
     );
   } else {
-    // slim output: only the failed command's error lines
     const failed = results[results.length - 1];
     const errorLines = extractErrors(
       failed.stdout ?? '',
@@ -629,7 +653,7 @@ async function verifyP2(flags) {
       `- errorCount: ${errorLines.length}`,
       ``,
       '```text',
-      ...errorLines.map((l) => l.slice(0, 200)), // truncate long lines
+      ...errorLines.map((l) => l.slice(0, 200)),
       '```',
     );
   }
@@ -638,9 +662,7 @@ async function verifyP2(flags) {
 
   await fs.writeFile(evidencePath, md.join('\n'), 'utf8');
 
-  // write errors-only file for convergence loop (agent reads this, not full evidence)
   if (allPassed) {
-    // clean up previous error file
     try {
       await fs.unlink(errorsPath);
     } catch {}
@@ -660,18 +682,17 @@ async function verifyP2(flags) {
 
   process.stdout.write(`\nEvidence saved: ${evidencePath}\n`);
   if (!allPassed) process.stdout.write(`Errors saved: ${errorsPath}\n`);
-  // CLI-only: exit directly with pass/fail code for TOML gate consumption
   process.exit(allPassed ? 0 : 1);
 }
 
 function extractErrors(stdout, stderr, key) {
   const lines = [...stdout.split('\n'), ...stderr.split('\n')];
   const errorPatterns = [
-    /error/i, // generic error
-    /Error:/, // build errors
-    /✖/, // lint errors
-    /TS\d{4}:/, // TypeScript error codes
-    /FAILED/, // test-like failures
+    /error/i,
+    /Error:/,
+    /✖/,
+    /TS\d{4}:/,
+    /FAILED/,
     /cannot find/i,
     /is not a/i,
     /Unexpected/i,
@@ -683,7 +704,6 @@ function extractErrors(stdout, stderr, key) {
   return lines.filter((line) => {
     const trimmed = line.trim();
     if (!trimmed) return false;
-    // error lines contain at least one known error pattern
     return errorPatterns.some((p) => p.test(trimmed));
   });
 }
@@ -754,11 +774,10 @@ async function verifyTweak(flags) {
   await fs.writeFile(evidencePath, md, 'utf8');
 
   process.stdout.write(`\nEvidence saved: ${evidencePath}\n`);
-  // CLI-only: exit directly for TOML gate consumption
   process.exit(checkTypeResult.code === 0 ? 0 : 1);
 }
 
-// ── Gate state machine (inline replacement for pipeline-step.sh) ──
+// ── Gate state machine ──
 
 const GATE_SEQUENCE = ['P0', 'P1', 'P2', 'P3', 'DONE'];
 const GATE_TEMPLATE = { P0: null, P1: null, P2: null, P3: null, DONE: null };
@@ -834,14 +853,6 @@ async function startDevflow(flags) {
   const mode = flags.get('mode') ?? 'full';
   const change = flags.get('change') ?? '';
 
-  const workflowByMode = {
-    full: 'WF-FULL',
-    hotfix: 'WF-HOTFIX',
-    tweak: 'WF-TWEAK',
-  };
-  const workflowId = workflowByMode[mode] ?? workflowByMode.full;
-
-  // task-type mapping
   const taskTypeByMode = {
     full: 'full',
     hotfix: 'mandatory',
@@ -851,11 +862,10 @@ async function startDevflow(flags) {
 
   if (!change.trim()) {
     throw new Error(
-      `缺少参数：--change <name>\n示例：pnpm -s run devflow:start -- --mode ${mode} --change feat-xxx`,
+      `缺少参数：--change <name>\n示例：pnpm -s run harness:start -- --mode ${mode} --change feat-xxx`,
     );
   }
 
-  // gate-reset is the single source of truth for init — handled here, not in WF TOML
   const gateResetResult = await runCommand(
     'node',
     ['./scripts/harness.mjs', 'gate-reset', '--type', taskType, '--id', change],
@@ -866,20 +876,18 @@ async function startDevflow(flags) {
     process.exit(1);
   }
 
-  const steps = [
-    ['pnpm', ['-s', 'run', 'devflow:select', '--', workflowId]],
-    ['pnpm', ['-s', 'run', 'devflow:set', '--', 'change', change]],
-    ['pnpm', ['-s', 'run', 'devflow:done']],
-    ['pnpm', ['-s', 'run', 'devflow:done']],
-    ['pnpm', ['-s', 'run', 'devflow:current']],
-  ];
+  const phases =
+    mode === 'tweak'
+      ? 'skip → tweak → phase4 → done'
+      : 'P0 → P1 → P2 → P3 → P4 → done';
 
-  for (const [cmd, args] of steps) {
-    const r = await runCommand(cmd, args, ROOT);
-    if (r.code !== 0) {
-      process.exit(1);
-    }
-  }
+  process.stdout.write(
+    `🚀 工作流已就绪\n` +
+      `   Mode: ${mode} (${taskType})\n` +
+      `   Change: ${change}\n` +
+      `   路径: ${phases}\n\n` +
+      `  按 AGENTS.md Phase 执行协议推进。\n`,
+  );
 }
 
 function printHelp() {
@@ -894,19 +902,11 @@ Usage:
   node scripts/harness.mjs p4 [--id <runId>] [--check] [--overwrite]
   node scripts/harness.mjs skip [--id <runId>] [--marker <marker>] [--reason <reason>]
   node scripts/harness.mjs tweak [--id <runId>]
-  node scripts/harness.mjs approve --phase p0|p1|p3|p4 [--id <runId>] [--status written|skipped] [--path <compoundEngineeringPath>]
   node scripts/harness.mjs start --mode full|hotfix|tweak --change <name>
   node scripts/harness.mjs gate --phase p0|p1|p2|p3|done [--id <runId>]
+  node scripts/harness.mjs approve --phase p0|p1|p3|p4 [--id <runId>] [--status written|skipped]
   node scripts/harness.mjs gate-reset --type full|mandatory|auto-skip [--id <runId>]
   node scripts/harness.mjs gate-verify [--id <runId>]
-
-Notes:
-  - 所有产物写入 .devflow/（已在 .gitignore 忽略）
-  - gate/gate-reset/gate-verify 替代 pipeline-step.sh（零外部依赖）
-  - p0/p1/p3/p4 用于生成阶段证据模板，便于团队统一填充
-  - p2 会运行 check:type + build（main/full 可选）并写 Evidence
-  - skip/tweak 用于对齐 WF-TWEAK（AUTO-SKIP 路径）
-  - start 用于“一键进入 DevFlow workflow”，会自动 select-workflow + set change + done 两次进入下一步
 `);
 }
 
@@ -922,62 +922,50 @@ async function main() {
     await writeP0(flags);
     return;
   }
-
   if (command === 'tasks') {
     await writeTasks(flags);
     return;
   }
-
   if (command === 'p1') {
     await writeP1(flags);
     return;
   }
-
   if (command === 'p2') {
     await verifyP2(flags);
     return;
   }
-
   if (command === 'p3') {
     await writeP3(flags);
     return;
   }
-
   if (command === 'p4') {
     await writeP4(flags);
     return;
   }
-
   if (command === 'skip') {
     await writeSkip(flags);
     return;
   }
-
   if (command === 'tweak') {
     await verifyTweak(flags);
     return;
   }
-
   if (command === 'start') {
     await startDevflow(flags);
     return;
   }
-
-  if (command === 'approve') {
-    await approveGate(flags);
-    return;
-  }
-
   if (command === 'gate') {
     await gateCheck(flags);
     return;
   }
-
+  if (command === 'approve') {
+    await approveGate(flags);
+    return;
+  }
   if (command === 'gate-reset') {
     await gateReset(flags);
     return;
   }
-
   if (command === 'gate-verify') {
     await gateVerify(flags);
     return;

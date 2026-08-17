@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/session-init.cjs",
+        "timeout": 3000
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/prompt-check.cjs",
+        "timeout": 2000
+      }
+    ],
+    "PreToolUse": [
+      {
+        "match": ".*",
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/gate-guard.cjs",
+        "timeout": 3000
+      }
+    ],
+    "PostToolUse": [
+      {
+        "match": "bash",
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/evidence-collector.cjs",
+        "timeout": 3000
+      }
+    ],
+    "PreCompact": [
+      {
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/compact-guard.cjs",
+        "timeout": 2000
+      }
+    ],
+    "SessionEnd": [
+      {
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/session-end.cjs",
+        "timeout": 3000
+      }
+    ]
+  }
+}

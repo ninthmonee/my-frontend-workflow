@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "language": "zh-CN",
+  "packageManager": "pnpm",
+  "workflowDir": "workflow",
+  "stateFile": "workflow/harness/state.json",
+  "evidenceDir": "workflow/evidence",
+  "skillsDir": ".reasonix/skills",
+  "infraFiles": [
+    "AGENTS.md",
+    "REASONIX.md",
+    "workflow.md",
+    "scripts/harness.mjs"
+  ],
+  "maxConvergenceRounds": 3,
+  "verify": {
+    "lintEnabled": true,
+    "full": [
+      { "key": "build", "script": "build" },
+      { "key": "format", "script": "format" },
+      { "key": "lint", "script": "lint" },
+      { "key": "typecheck", "script": "check:type" }
+    ],
+    "tweak": [{ "key": "typecheck", "script": "check:type" }]
+  }
+}

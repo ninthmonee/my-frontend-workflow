@@ -1,0 +1,14 @@
+{
+  "harness:p0": "node ./scripts/harness.mjs p0",
+  "harness:tasks": "node ./scripts/harness.mjs tasks",
+  "harness:p1": "node ./scripts/harness.mjs p1",
+  "harness:p2": "node ./scripts/harness.mjs p2",
+  "harness:p3": "node ./scripts/harness.mjs p3",
+  "harness:p4": "node ./scripts/harness.mjs p4",
+  "harness:skip": "node ./scripts/harness.mjs skip",
+  "harness:tweak": "node ./scripts/harness.mjs tweak",
+  "harness:gate": "node ./scripts/harness.mjs gate",
+  "harness:gate-reset": "node ./scripts/harness.mjs gate-reset",
+  "harness:gate-verify": "node ./scripts/harness.mjs gate-verify",
+  "harness:start": "node ./scripts/harness.mjs start"
+}

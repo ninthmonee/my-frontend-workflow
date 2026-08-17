@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "language": "zh-CN",
+  "packageManager": "pnpm",
+  "workflowDir": "workflow",
+  "stateFile": "workflow/harness/state.json",
+  "evidenceDir": "workflow/evidence",
+  "skillsDir": ".reasonix/skills",
+  "infraFiles": [
+    "AGENTS.md",
+    "REASONIX.md",
+    "workflow.md",
+    "scripts/harness.mjs"
+  ],
+  "maxConvergenceRounds": 3,
+  "verify": {
+    "lintEnabled": true,
+    "full": [
+      {
+        "key": "build",
+        "script": "build:main:{env}",
+        "defaultEnv": "dev",
+        "variants": {
+          "main": "build:main:{env}",
+          "full": "build"
+        }
+      },
+      { "key": "format", "script": "format" },
+      { "key": "lint", "script": "lint" },
+      { "key": "typecheck", "script": "check:type" }
+    ],
+    "tweak": [{ "key": "typecheck", "script": "check:type" }]
+  },
+  "coreConstraints": "🔒 核心约束: 最小改动 | 组件库≠ant-design-vue | 零测试 | 不猜API先查skill | 证据优先"
+}
