@@ -74,11 +74,7 @@
     "harness:gate-verify": "node scripts/harness.mjs gate-verify",
     "harness:gate-reset": "node scripts/harness.mjs gate-reset",
     "harness:skip": "node scripts/harness.mjs skip",
-    "harness:tweak": "node scripts/harness.mjs tweak",
-    "devflow:select": "node scripts/harness.mjs select",
-    "devflow:set": "node scripts/harness.mjs set",
-    "devflow:done": "node scripts/harness.mjs done",
-    "devflow:current": "node scripts/harness.mjs current"
+    "harness:tweak": "node scripts/harness.mjs tweak"
   },
   "devDependencies": {
     "@changesets/changelog-github": "catalog:",

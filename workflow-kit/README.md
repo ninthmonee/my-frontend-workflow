@@ -87,6 +87,7 @@ node install.mjs --config adapters/example-vue-vite/workflow.config.json --targe
 4. skills：剥离 `antdv-next` / `@decision-core` 等项目专属内容，保留机制（`{{PM}}` 等占位符由安装器替换）
 5. 经验库：`compound-engineering/references/` 只保留机制脚手架，不携带任何项目经验数据
 6. 新增 `install.mjs`（交互式/非交互式安装）与 `adapters/`（示例适配器）
+7. **v5.1（2026-08 同步项目最新更新）**：Phase 0 新增「改动清单简要」强制输出——P0 计划通过前，把逐文件改动点 + 非目标直接输出到对话框，用户不打开证据文件即可审阅（已同步至 AGENTS.template.md / workflow.template.md）
 
 ## 七、FAQ
 

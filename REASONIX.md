@@ -37,8 +37,8 @@ packages/
   utils/                — 工具函数
 internal/               — 构建/规范工具（vite/tailwind/tsconfig/lint/node-utils）
 scripts/                — 仓库脚本（harness.mjs 等）
-.devflow/               — 工作流运行时（evidence/、harness/state.json、workflows/*.toml）
-.reasonix/skills/        — 项目级 Reasonix skill（devflow、devflow-worker）
+workflow/               — 工作流运行时（evidence/、harness/state.json、hooks/）
+.reasonix/skills/        — 项目级 skill 库（含 Vue 技术栈、工作流、调试/设计等全套 skill）
 ```
 
 ## 常用命令
@@ -51,26 +51,24 @@ scripts/                — 仓库脚本（harness.mjs 等）
 | `pnpm build` | 全量构建（8 GB heap） |
 | `pnpm check:type` | typecheck（`turbo run typecheck`；各包通常使用 `vue-tsc`） |
 | `pnpm lint` | ESLint + Stylelint |
-| `pnpm check` | 全链路检查（circular-deps → depcheck → typecheck → cspell） |
 | `pnpm format` | 格式化（全量） |
+| `pnpm check` | 全链路检查（circular-deps → depcheck → typecheck → cspell） |
 | `pnpm commit` | 提交（交互式 Conventional Commit） |
 
 ### 工作流
 
 | 命令 | 目的 |
 |---|---|
-| `pnpm -s run devflow:start -- --mode full --change <name>` | 启动完整工作流 |
-| `/devflow full feat-xxx` | 斜杠命令快捷启动（full/hotfix/tweak） |
-| `pnpm -s run devflow:current` | 查看当前步骤 |
-| `pnpm -s run devflow:done` | 推进到下一步 |
+| `pnpm -s run harness:start -- --mode full --change <name>` | 启动完整工作流 |
+| `/workflow full feat-xxx` | 斜杠命令快捷启动（full/hotfix/tweak） |
 | `pnpm -s run harness:gate-reset -- --type full` | 重置 Gate 状态 |
-| `pnpm -s run harness:rollback -- --id <change>` | 回滚到快照 |
 
 ## Watch out for
 
 - **No test infrastructure** — 零个 `*.test.ts` / `*.spec.ts` 文件，无测试运行器。Phase 2 通过 typecheck + build + lint 作为替代验证。
 - **No CI/CD** — 无 GitHub Actions workflows、无 PR templates、无 review automation。
-- **No pre-commit typecheck** — `check:type` 不绑定 git hooks。但 DevFlow Phase 2 强制执行 typecheck+build+lint。
+- **No pre-commit typecheck** — `check:type` 不绑定 git hooks。但 Phase 2 强制执行 typecheck+build+format+lint。
 - **antdv-next**（非 ant-design-vue）— Slot/prop API 可能不同。编辑组件前 MUST 加载 `antdv-next` skill。
-- **Skills** 位于项目内 `.agents/skills/`，随仓库分发，无需额外安装。
+- **Skills** 全部在 `.reasonix/skills/` 中，通过 git 管理，团队成员 clone 即用，无需额外安装。
 - **MCP servers**：`codegraph`（代码关系检索）、`mcp-vue`（Vue SFC AST 解析）。
+- **平台原生优先**：遵循 [Ponytail 决策阶梯](https://github.com/DietrichGebert/ponytail) — 写代码前逐级自问：YAGNI？→ stdlib？→ 浏览器原生（`<input type="date">` 等）？→ 已安装依赖？→ 项目封装？→ 一行？→ 最小实现。详见 AGENTS.md Phase 1 和硬约束部分。

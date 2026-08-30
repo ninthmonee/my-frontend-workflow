@@ -2,46 +2,40 @@
   "hooks": {
     "SessionStart": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/session-init.cjs",
-        "timeout": 30000,
-        "description": "cwd diagnosis + state.json corruption detection"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/session-init.cjs",
+        "timeout": 3000
       }
     ],
     "UserPromptSubmit": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/prompt-check.cjs",
-        "timeout": 5000,
-        "description": "Match skip-keywords → exit 2 block submission"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/prompt-check.cjs",
+        "timeout": 2000
       }
     ],
     "PreToolUse": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/gate-guard.cjs",
         "match": ".*",
-        "timeout": 5000,
-        "description": "Gate enforcement: P0 check before edits + dangerous bash block (7 patterns)"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/gate-guard.cjs",
+        "timeout": 3000
       }
     ],
     "PostToolUse": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/evidence-collector.cjs",
         "match": "bash",
-        "timeout": 30000,
-        "description": "Capture check:type/lint errors from bash tool output → last-check-errors.txt"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/evidence-collector.cjs",
+        "timeout": 3000
       }
     ],
     "PreCompact": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/compact-guard.cjs",
-        "timeout": 30000,
-        "description": "Output DevFlow core context to stdout → Reasonix uses as compaction guidance"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/compact-guard.cjs",
+        "timeout": 2000
       }
     ],
     "SessionEnd": [
       {
-        "command": "sh .devflow/hooks/node-shim.sh .devflow/hooks/session-end.cjs",
-        "timeout": 30000,
-        "description": "DONE → confirm + cleanup; incomplete → reminder"
+        "command": "sh workflow/hooks/node-shim.sh workflow/hooks/session-end.cjs",
+        "timeout": 3000
       }
     ]
   }
