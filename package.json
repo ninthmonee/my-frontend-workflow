@@ -64,6 +64,7 @@
     "update:deps": "npx taze -r -w",
     "version": "pnpm exec changeset version && pnpm install --no-frozen-lockfile",
     "catalog": "pnpm dlx codemod pnpm/catalog",
+    "harness:start": "node scripts/harness.mjs start",
     "harness:p0": "node scripts/harness.mjs p0",
     "harness:p1": "node scripts/harness.mjs p1",
     "harness:p2": "node scripts/harness.mjs p2",
@@ -73,8 +74,15 @@
     "harness:gate": "node scripts/harness.mjs gate",
     "harness:gate-verify": "node scripts/harness.mjs gate-verify",
     "harness:gate-reset": "node scripts/harness.mjs gate-reset",
+    "harness:restore": "node scripts/harness.mjs restore",
+    "harness:gc": "node scripts/harness.mjs gc",
+    "harness:switch": "node scripts/harness.mjs switch",
+    "harness:list": "node scripts/harness.mjs list",
+    "harness:drop": "node scripts/harness.mjs drop",
+    "harness:test": "node --test workflow/tests/*.test.mjs",
     "harness:skip": "node scripts/harness.mjs skip",
-    "harness:tweak": "node scripts/harness.mjs tweak"
+    "harness:tweak": "node scripts/harness.mjs tweak",
+    "harness:approve": "node scripts/harness.mjs approve"
   },
   "devDependencies": {
     "@changesets/changelog-github": "catalog:",

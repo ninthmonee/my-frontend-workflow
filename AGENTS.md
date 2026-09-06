@@ -19,7 +19,7 @@
 
 **入口判断（先质后量）：** 按分级标准判定 🟢🟡🔴 → **输出标记**（`⚠️ [AUTO-SKIP]` / `⚠️ [MANDATORY]`）→ 走对应路径。🟡 默认走 TWEAK，用户说"走流程"则转 FULL。禁止未输出标记直接写代码。
 
-> ⚠️ SessionStart 后 MUST 先读取 `workflow/harness/state.json` 检查是否有活跃流程。若 `taskType` 为 full/mandatory/hotfix 且 `gates.DONE` 未 passed → **继续当前流程**，不需要重复入口判断。若 `gates.DONE` 已 passed → 新变更请求需重新 `pnpm -s run harness:start`。
+> ⚠️ SessionStart 后 MUST 先读取 `workflow/harness/state.json`（多槽 registry）并 `pnpm -s run harness:list` 检查是否有活跃/挂起任务。`state.current` 指向的槽位即当前流程：若其 `taskType` 为 full/mandatory/hotfix 且 `gates.DONE` 未 passed → **继续当前流程**，不需要重复入口判断。若 `gates.DONE` 已 passed → 新变更请求需重新 `pnpm -s run harness:start`。存在挂起槽位时提示用户是否 `harness:switch` 恢复。
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## Phase 执行协议
 
-Gate 状态由 `harness:gate` 写入 `workflow/harness/state.json`，Agent 按 Phase 协议逐阶段推进。
+Gate 状态由 `harness:gate` 写入 `workflow/harness/state.json`，Agent 按 Phase 协议逐阶段推进。**Gate 推进前会自动校验对应 Phase 证据**（P0=P0.md+TASKS.md 无占位符、P1=P1.md+TASKS 无未完成任务、P2=P2.md allPassed:true、P3=P3.md userConfirmed、DONE=P4.md 已填写）——证据缺失/占位符直接拒绝推进，不能"空手过门"。
 
 **每个 Phase 进入时 MUST 输出进度摘要 + 证据文件索引：**
 
@@ -79,14 +79,18 @@ Gate 状态由 `harness:gate` 写入 `workflow/harness/state.json`，Agent 按 P
 📋 任务: 2/4 done（读取 TASKS.md 获取最新状态）
 ```
 
-### 同一 Session 内多次启动工作流（重要）
+### 同一 Session 内多次启动工作流 / 多任务切换（重要）
 
-`harness:start` 会调用 `gate-reset` 清空 `workflow/harness/state.json`，但 Agent 的会话上下文不会自动清空。同 session 内第二次及后续启动工作流时，Agent MUST 遵守：
+`state.json` 为**多槽 registry**：每次 `harness:start` 创建/激活一个独立槽位（按 `--change` 命名），各槽位的 `taskType/gates/change` 互不干扰，证据目录 `workflow/evidence/<change>/` 天然隔离。**同一时刻只有一个 current 槽**（门禁判定只跟随它）。但 Agent 的会话上下文不会自动清空，同 session 内切换/开启多个任务时，Agent MUST 遵守：
 
 - 将每次 `harness:start` 视为全新工作流的起点，按 Phase 执行协议从头推进，**不可因"刚走过一轮"而跳过步骤**
 - Phase 0 所有步骤不可跳过（步骤 1 在确认 project-constraints 仍在上下文时可跳过加载，否则必须重载）
 - **严禁**用上一轮工作流的 Phase 3「已解决」结论来跳过新一轮的任何 Gate 或确认步骤
-- 每次 `harness:start` 使用独立的 `--change` 名称，证据目录 `workflow/evidence/<change>/` 互不干扰
+- 每次 `harness:start` 使用独立的 `--change` 名称；若同名槽位已存在且未完成 → `harness:start` 会报错，须先 `pnpm -s run harness:drop -- --change <name>` 放弃，或改用新名称
+- **挂起/恢复任务**：`pnpm -s run harness:switch -- --change <name>` 切换 current 槽（原任务保留进度、自然挂起）；`harness:list` 查看全部槽位与 Gate 进度；`harness:drop` 删除槽位（证据目录保留）
+- **TWEAK 槽位自动回收**：`harness:tweak` 验证通过后 auto-skip 槽自动从 registry 移除（TWEAK 无门禁状态可恢复，证据 TWEAK.md 保留），无需手动 drop
+- **重跑同名任务**：若槽位已完结或不存在但 `evidence/<change>/` 有旧证据 → `harness:start` 会把旧证据自动归档到 `evidence/_archive/` 后重建，避免新流程证据被上一轮内容污染
+- 切换任务前若工作区有上一任务的未提交改动 → 先 `git stash`（证据已由 `harness:p1` 记录），恢复后 `git stash pop`
 
 ### Phase 0 — 改前准备
 
@@ -212,5 +216,7 @@ Gate 状态由 `harness:gate` 写入 `workflow/harness/state.json`，Agent 按 P
 | 直接写代码没声明标记 | ⛔ 回退 → 先做入口判断并输出标记 |
 | typecheck exit≠0 声称通过 | ⛔ 回退 → 逐条确认错误来源 |
 | 跳过路径未跑 check:type | ⛔ 跳过也必须跑 |
-| 状态文件脏了 | `pnpm -s run harness:gate-reset -- --type full` |
+| 状态文件脏了 | `pnpm -s run harness:restore`（从备份恢复）→ 仍不行再 `pnpm -s run harness:gate-reset -- --type full` |
+| 开新任务撞同名槽 | 换 `--change` 名称，或先 `pnpm -s run harness:drop -- --change <name>` |
+| 查看/切换多任务 | `pnpm -s run harness:list` / `harness:switch -- --change <name>` |
 | 改坏了想回退 | `git checkout -- <file>` 按文件回退；`git checkout -- .` 全量丢弃 |

@@ -13,12 +13,9 @@ default_model = "deepseek-flash"
 temperature       = 0.0
 # reasoning_language = "zh"   # visible reasoning language: auto|zh|en
 # auto_plan_classifier = "deepseek-flash"   # optional; only used for borderline tasks
-soft_compact_ratio  = 0.5   # notice only; keeps cache-first prefix intact
 compact_ratio       = 0.8   # try compacting when prompt reaches this fraction
-compact_force_ratio = 0.9   # force compacting at this high-water mark
 # keep                = ["errors"]   # compaction keep policy: errors, user_marked
 # recent_keep         = 2   # minimum recent messages kept verbatim
-cold_resume_prune   = true   # elide stale tool results when reopening a session past the provider cache window
 # planner_model = "deepseek-pro"   # optional: enable two-model collaboration
 # subagent_model = "deepseek-pro"   # optional default for runAs=subagent skills
 # subagent_models = { review = "deepseek-pro", security_review = "deepseek-pro" }   # per-skill overrides
@@ -94,8 +91,6 @@ enabled = true   # language server tools; servers launch lazily when used
 # max_depth = 3   # nested scan depth; set 1 for legacy root-only discovery
 # disabled_skills = ["review"]   # hide noisy or unwanted skills
 
-[permissions]
-allow = ["Bash(ls -lt /Users/admin/.reasonix/sessions/ | head -5)", "Bash(ls -lt /Users/admin/.reasonix/sessions/ | grep -i \"deepseek\" | head -10)", "Bash(ls /Users/admin/.reasonix/sessions/ | grep \"deepseek\" | head -20)", "Bash(ls -lt /Users/admin/.reasonix/sessions/ | head -20)", "Bash(cat /Users/admin/.reasonix/sessions/code-Desktop.meta.json 2>/dev/null || echo \"not found\")", "Bash(cd /Users/admin/.reasonix/sessions && ls -lt | head -25 && echo \"---\" && ls -lt */ | head -10 2>/dev/null)", "Bash(find /Users/admin/.reasonix -name \"*.json\" -newer /Users/admin/.reasonix/sessions/code-optimos-intco-frontend.meta.json 2>/dev/null | head -20)", "Edit", "task", "Bash(find /Users/admin/.reasonix -name \"*hook*\" -o -name \"*HOOK*\" 2>/dev/null | head -30)", "Bash(find /Users/admin/.agents -name \"*hook*\" -o -name \"*HOOK*\" 2>/dev/null | head -30)", "Bash(find /Users/admin/.reasonix -type f -name \"*.toml\" -o -name \"*.json\" -o -name \"*.yaml\" -o -name \"*.yml\" 2>/dev/null | head -20)", "Bash(reasonix --help 2>/dev/null | grep -i hook || echo \"no hook flag found\")", "Bash(ls /Users/admin/.reasonix/pipeline/ 2>/dev/null || echo \"no pipeline dir\")", "Bash(ls /Users/admin/.agents/pipeline/ 2>/dev/null || echo \"no agents pipeline\")", "Bash(find /Users/admin/.reasonix -name \"*.toml\" -path \"*/project*\" 2>/dev/null; find /Users/admin/Desktop/projects/optimos-intco-frontend -name \"reasonix.toml\" 2>/dev/null)", "Bash(cd /Users/admin/Desktop/projects/optimos-intco-frontend && echo \"=== 完整性检查 ===\" && echo \"--- Hooks 事件关键覆盖 ---\" && for event in SessionStart SessionEnd PreToolUse PostToolUse PreCompact UserPromptSubmit; do c=$(grep -c \"$event\" DEVFLOW_WORKFLOW_SHARE.md); echo \"  $event: $c 处\"; done && echo \"--- 配置文件引用 ---\" && grep -c 'hooks\\.json' DEVFLOW_WORKFLOW_SHARE.md && echo \"--- settings.json 引用 ---\" && grep -c 'settings\\.json' DEVFLOW_WORKFLOW_SHARE.md && echo \"--- exit 2 引用 ---\" && grep -c 'exit 2' DEVFLOW_WORKFLOW_SHARE.md && echo \"--- 行数 ---\" && wc -l DEVFLOW_WORKFLOW_SHARE.md)", "Bash(cd /Users/admin/Desktop/projects/optimos-intco-frontend && pnpm -s run devflow:start -- --mode tweak --change fix-devflow-worker-tools 2>&1)", "Bash(cd /Users/admin/Desktop/projects/optimos-intco-frontend && pnpm -s run harness:skip -- --id fix-devflow-worker-tools --marker AUTO-SKIP --reason tweak:auto 2>&1)", "Bash(cd /Users/admin/Desktop/projects/optimos-intco-frontend && pnpm -s run devflow:done 2>&1)", "Bash(cd /Users/admin/Desktop/projects/optimos-intco-frontend && pnpm -s run harness:tweak -- --id fix-devflow-worker-tools 2>&1)"]
 [sandbox]
 # Confine tool blast radius. File-writers (write_file/edit_file/multi_edit/move_file)
 # may only write under workspace_root (empty = current dir) and allow_write extras.
@@ -106,6 +101,7 @@ allow = ["Bash(ls -lt /Users/admin/.reasonix/sessions/ | head -5)", "Bash(ls -lt
 bash    = "enforce"
 network = true
 
+allow_write = ["${HOME}/Library/pnpm", "${HOME}/.nvm"]
 [statusline]
 # A custom status line: a command whose first stdout line replaces the built-in
 # data row. It receives {"model","contextUsed","contextWindow","cwd"} as JSON on stdin.

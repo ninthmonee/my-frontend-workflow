@@ -60,3 +60,11 @@ vite.config.ts.*
 skills-lock.json
 .atomcode
 datalog
+
+# Workflow runtime state (harness 状态中枢与备份/锁——运行态，不入库)
+workflow/harness/
+# Workflow evidence (每次改动的证据目录——运行态，不入库)
+workflow/evidence/
+
+# Reasonix 桌面端会话元数据（运行态，随会话更新，不入库）
+.reasonix/desktop-topic-*.json

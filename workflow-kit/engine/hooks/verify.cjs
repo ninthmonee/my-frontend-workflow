@@ -7,13 +7,17 @@
  * verify.cjs — 工作流 Hooks 验证脚本
  *
  * 模拟每个 hook 的 stdin payload，检查退出码和输出。
+ * 自适应：无 active full/mandatory 流程时自动创建临时验证槽位（__verify-*），
+ * 结束后自动 drop——保证 8/8 全绿且不污染真实状态。
  * 用法: node workflow/hooks/verify.cjs
  */
 
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const hooksDir = __dirname;
+const rootDir = path.resolve(__dirname, '../..');
 const pass = (msg) => console.log(`  ✅ ${msg}`);
 const fail = (msg) => console.log(`  ❌ ${msg}`);
 
@@ -32,6 +36,30 @@ function runHook(script, payload) {
       stderr: (error.stderr || '').trim(),
     };
   }
+}
+
+function harnessCmd(args) {
+  const res = spawnSync(
+    'node',
+    [path.join(rootDir, 'scripts/harness.mjs'), ...args],
+    { cwd: rootDir, encoding: 'utf8' },
+  );
+  return { code: res.status, stdout: res.stdout, stderr: res.stderr };
+}
+
+// ── 自适应 setup：无 active full/mandatory 槽 → 临时起 probe 槽 ──
+const { resolveState } = require('./lib.cjs');
+const st = resolveState();
+const hasActiveFlow =
+  ['full', 'mandatory'].includes(st.taskType) && Boolean(st.state);
+const probeName = hasActiveFlow ? null : `__verify-${Date.now()}`;
+if (probeName) {
+  const started = harnessCmd(['start', '--mode', 'full', '--change', probeName]);
+  if (started.code !== 0) {
+    console.error(`⚠️ 无法创建验证槽位 ${probeName}: ${started.stderr}`);
+    process.exit(1);
+  }
+  console.log(`ℹ️  未检测到 active 流程，已临时创建验证槽位 ${probeName}（结束后自动删除）`);
 }
 
 console.log('╔══════════════════════════════════════╗');
@@ -177,6 +205,54 @@ if (se.code === 0) {
   fail(`session-end exit ${se.code}: ${se.stderr}`);
 }
 
+// ── 9. .reasonix/settings.json hook 绑定检测 ─────────────
+console.log('📋 .reasonix/settings.json (hook 绑定完整性)');
+total++;
+const EXPECTED_HOOKS = [
+  'session-init',
+  'prompt-check',
+  'gate-guard',
+  'evidence-collector',
+  'compact-guard',
+  'session-end',
+];
+try {
+  const settingsPath = path.resolve(rootDir, '.reasonix/settings.json');
+  const cfg = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const bound = Object.values(cfg.hooks || {})
+    .flat()
+    .map((h) => h.command || '');
+  const missingBind = EXPECTED_HOOKS.filter(
+    (name) => !bound.some((c) => c.includes(`workflow/hooks/${name}.cjs`)),
+  );
+  const missingFiles = EXPECTED_HOOKS.filter(
+    (name) => !fs.existsSync(path.join(hooksDir, `${name}.cjs`)),
+  );
+  const shimOk = fs.existsSync(path.join(hooksDir, 'node-shim.sh'));
+  if (missingBind.length === 0 && missingFiles.length === 0 && shimOk) {
+    pass(
+      `settings.json 绑定完整（${EXPECTED_HOOKS.length} 个 hook + node-shim.sh 均就绪）`,
+    );
+    ok++;
+  } else {
+    fail(
+      `绑定异常 → 未绑定: ${missingBind.join(',') || '无'} | 文件缺失: ${missingFiles.join(',') || '无'} | node-shim.sh: ${shimOk ? '✅' : '❌'}`,
+    );
+  }
+} catch (error) {
+  fail(`settings.json 读取失败: ${error.message}`);
+}
+
+// ── teardown：删除临时验证槽位 ─────────────────────────
+if (probeName) {
+  const dropped = harnessCmd(['drop', '--change', probeName]);
+  console.log(
+    dropped.code === 0
+      ? `ℹ️  验证槽位 ${probeName} 已删除`
+      : `⚠️ 验证槽位 ${probeName} 删除失败（${dropped.stderr}），可手动 pnpm -s run harness:drop -- --change ${probeName}`,
+  );
+}
+
 // ── 汇总 ─────────────────────────────────────────────────
 console.log();
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -186,7 +262,3 @@ console.log(
 );
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 console.log();
-if (ok < total) {
-  console.log('提示: 部分检查失败可能是 state.json 未初始化导致的预期行为。');
-  console.log('在有活跃工作流时重新运行此脚本可获得更准确结果。');
-}

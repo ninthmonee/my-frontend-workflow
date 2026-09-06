@@ -26,6 +26,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const KIT_ROOT = path.resolve(__dirname);
 
 const HARNESS_SCRIPTS = {
+  'harness:start': 'node ./scripts/harness.mjs start',
   'harness:p0': 'node ./scripts/harness.mjs p0',
   'harness:tasks': 'node ./scripts/harness.mjs tasks',
   'harness:p1': 'node ./scripts/harness.mjs p1',
@@ -35,9 +36,14 @@ const HARNESS_SCRIPTS = {
   'harness:skip': 'node ./scripts/harness.mjs skip',
   'harness:tweak': 'node ./scripts/harness.mjs tweak',
   'harness:gate': 'node ./scripts/harness.mjs gate',
+  'harness:approve': 'node ./scripts/harness.mjs approve',
   'harness:gate-reset': 'node ./scripts/harness.mjs gate-reset',
   'harness:gate-verify': 'node ./scripts/harness.mjs gate-verify',
-  'harness:start': 'node ./scripts/harness.mjs start',
+  'harness:restore': 'node ./scripts/harness.mjs restore',
+  'harness:gc': 'node ./scripts/harness.mjs gc',
+  'harness:switch': 'node ./scripts/harness.mjs switch',
+  'harness:list': 'node ./scripts/harness.mjs list',
+  'harness:drop': 'node ./scripts/harness.mjs drop',
 };
 
 const DEFAULT_SKILL_KEYS = [
